@@ -10,16 +10,19 @@ const io = new Server(server, { cors: { origin: "*" } });
 // Queue per course: { courseName: [socket, socket, ...] }
 let waitingQueues = {};
 
+// Add socket to waiting queue
 function addToQueue(socket, course) {
   if (!waitingQueues[course]) waitingQueues[course] = [];
   waitingQueues[course].push(socket);
 }
 
+// Remove socket from waiting queue
 function removeFromQueue(socket, course) {
   if (!waitingQueues[course]) return;
   waitingQueues[course] = waitingQueues[course].filter((s) => s.id !== socket.id);
 }
 
+// Try to match two users in same course
 function matchUsers(course) {
   if (!waitingQueues[course] || waitingQueues[course].length < 2) return;
 
@@ -49,6 +52,7 @@ function matchUsers(course) {
 io.on("connection", (socket) => {
   console.log("✅ User connected:", socket.id);
 
+  // User joins the queue
   socket.on("joinQueue", ({ username, course }) => {
     socket.username = username;
     socket.course = course;
@@ -65,6 +69,7 @@ io.on("connection", (socket) => {
     matchUsers(course);
   });
 
+  // Handle chat messages
   socket.on("message", (msg) => {
     if (socket.room) {
       io.to(socket.room).emit("message", {
@@ -74,6 +79,20 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Typing indicator
+  socket.on("typing", () => {
+    if (socket.room) {
+      socket.to(socket.room).emit("typing", socket.username);
+    }
+  });
+
+  socket.on("stopTyping", () => {
+    if (socket.room) {
+      socket.to(socket.room).emit("stopTyping");
+    }
+  });
+
+  // User leaves the chat manually
   socket.on("leaveChat", async () => {
     if (socket.room) {
       const room = socket.room;
@@ -96,6 +115,7 @@ io.on("connection", (socket) => {
     removeFromQueue(socket, socket.course);
   });
 
+  // Handle disconnects
   socket.on("disconnect", () => {
     console.log("❌ User disconnected:", socket.id);
 
@@ -110,6 +130,7 @@ io.on("connection", (socket) => {
   });
 });
 
+// Start server
 server.listen(process.env.PORT || 3000, () =>
   console.log("🚀 Server running on http://localhost:3000")
 );
