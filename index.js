@@ -10,7 +10,7 @@ const io = new Server(server, { cors: { origin: "*" } });
 // Ping
 app.get("/", (req, res) => {
   res.send("CPC Chat Hub is running ✅");
-})
+});
 
 // Queue per course: { courseName: [socket, socket, ...] }
 let waitingQueues = {};
@@ -25,6 +25,9 @@ function addToQueue(socket, course) {
 function removeFromQueue(socket, course) {
   if (!waitingQueues[course]) return;
   waitingQueues[course] = waitingQueues[course].filter((s) => s.id !== socket.id);
+  if (waitingQueues[course].length === 0) {
+    delete waitingQueues[course]; // cleanup memory
+  }
 }
 
 // Try to match two users in same course
@@ -121,16 +124,27 @@ io.on("connection", (socket) => {
   });
 
   // Handle disconnects
-  socket.on("disconnect", () => {
+  socket.on("disconnect", async () => {
     console.log("❌ User disconnected:", socket.id);
 
     removeFromQueue(socket, socket.course);
 
     if (socket.room) {
-      io.to(socket.room).emit("message", {
+      const room = socket.room;
+
+      io.to(room).emit("message", {
         sender: "System",
         text: "⚠️ Your partner disconnected.",
       });
+
+      // Clear partner’s room property too
+      const clients = await io.in(room).fetchSockets();
+      clients.forEach((s) => {
+        s.room = null;
+      });
+
+      io.in(room).socketsLeave(room);
+      socket.room = null;
     }
   });
 });
