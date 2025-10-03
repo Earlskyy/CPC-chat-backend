@@ -7,6 +7,11 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
+// Ping
+app.get("/", (req, res) => {
+  res.send("CPC Chat Hub is running ✅");
+})
+
 // Queue per course: { courseName: [socket, socket, ...] }
 let waitingQueues = {};
 
