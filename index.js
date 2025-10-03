@@ -33,8 +33,17 @@ function matchUsers(course) {
   s1.room = room;
   s2.room = room;
 
-  s1.emit("message", { sender: "System", text: `🎉 Connected with ${s2.username}` });
-  s2.emit("message", { sender: "System", text: `🎉 Connected with ${s1.username}` });
+  // System message with highlight + course info
+  s1.emit("message", {
+    sender: "System",
+    text: `🎉 Connected with ${s2.username} from ${s2.course}`,
+    highlight: true,
+  });
+  s2.emit("message", {
+    sender: "System",
+    text: `🎉 Connected with ${s1.username} from ${s1.course}`,
+    highlight: true,
+  });
 }
 
 io.on("connection", (socket) => {
@@ -48,7 +57,10 @@ io.on("connection", (socket) => {
     removeFromQueue(socket, course);
     addToQueue(socket, course);
 
-    socket.emit("message", { sender: "System", text: "⏳ Waiting for a partner..." });
+    socket.emit("message", {
+      sender: "System",
+      text: "⏳ Waiting for a partner...",
+    });
 
     matchUsers(course);
   });
@@ -62,22 +74,22 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("leaveChat", () => {
+  socket.on("leaveChat", async () => {
     if (socket.room) {
       const room = socket.room;
 
-      io.to(room).emit("message", { sender: "System", text: "⚠️ The other person left the chat." });
-
-      // Clear the room for everyone inside
-      io.in(room).socketsLeave(room);
-
-      // Reset room for each socket
-      io.in(room).fetchSockets().then((clients) => {
-        clients.forEach((s) => {
-          s.room = null;
-        });
+      io.to(room).emit("message", {
+        sender: "System",
+        text: "⚠️ The other person left the chat.",
       });
 
+      // Grab sockets before removing them from the room
+      const clients = await io.in(room).fetchSockets();
+      clients.forEach((s) => {
+        s.room = null;
+      });
+
+      io.in(room).socketsLeave(room);
       socket.room = null;
     }
 
