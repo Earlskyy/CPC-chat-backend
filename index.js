@@ -12,30 +12,25 @@ app.get("/", (req, res) => {
   res.send("CPC Chat Hub is running ✅");
 });
 
-// Queue per course: { courseName: [socket, socket, ...] }
-let waitingQueues = {};
+// One global queue instead of per-course
+let waitingQueue = [];
 
 // Add socket to waiting queue
-function addToQueue(socket, course) {
-  if (!waitingQueues[course]) waitingQueues[course] = [];
-  waitingQueues[course].push(socket);
+function addToQueue(socket) {
+  waitingQueue.push(socket);
 }
 
 // Remove socket from waiting queue
-function removeFromQueue(socket, course) {
-  if (!waitingQueues[course]) return;
-  waitingQueues[course] = waitingQueues[course].filter((s) => s.id !== socket.id);
-  if (waitingQueues[course].length === 0) {
-    delete waitingQueues[course]; // cleanup memory
-  }
+function removeFromQueue(socket) {
+  waitingQueue = waitingQueue.filter((s) => s.id !== socket.id);
 }
 
-// Try to match two users in same course
-function matchUsers(course) {
-  if (!waitingQueues[course] || waitingQueues[course].length < 2) return;
+// Try to match two users globally
+function matchUsers() {
+  if (waitingQueue.length < 2) return;
 
   // Take first two users from the queue
-  const [s1, s2] = waitingQueues[course].splice(0, 2);
+  const [s1, s2] = waitingQueue.splice(0, 2);
 
   const room = [s1.id, s2.id].sort().join("#");
   s1.join(room);
@@ -44,7 +39,7 @@ function matchUsers(course) {
   s1.room = room;
   s2.room = room;
 
-  // System message with highlight + course info
+  // System message with highlight + show course info
   s1.emit("message", {
     sender: "System",
     text: `🎉 Connected with ${s2.username} from ${s2.course}`,
@@ -66,15 +61,15 @@ io.on("connection", (socket) => {
     socket.course = course;
 
     // Make sure user isn’t already in queue
-    removeFromQueue(socket, course);
-    addToQueue(socket, course);
+    removeFromQueue(socket);
+    addToQueue(socket);
 
     socket.emit("message", {
       sender: "System",
       text: "⏳ Waiting for a partner...",
     });
 
-    matchUsers(course);
+    matchUsers();
   });
 
   // Handle chat messages
@@ -120,14 +115,14 @@ io.on("connection", (socket) => {
       socket.room = null;
     }
 
-    removeFromQueue(socket, socket.course);
+    removeFromQueue(socket);
   });
 
   // Handle disconnects
   socket.on("disconnect", async () => {
     console.log("❌ User disconnected:", socket.id);
 
-    removeFromQueue(socket, socket.course);
+    removeFromQueue(socket);
 
     if (socket.room) {
       const room = socket.room;
